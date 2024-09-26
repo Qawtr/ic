@@ -1,5 +1,5 @@
 {
-  "checksum": "0b3ea17c968956a9bf172b31f0d4f15bc9347326fecb83b91781451bc74f5308",
+  "checksum": "4107200f05466d951c4a9edddb62259b9a5f2933ebf4e6c5f13a109e66ae87e5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18634,6 +18634,10 @@
             {
               "id": "walkdir 2.3.3",
               "target": "walkdir"
+            },
+            {
+              "id": "walrus 0.21.1",
+              "target": "walrus"
             },
             {
               "id": "warp 0.3.7",
@@ -79579,6 +79583,7 @@
     "uuid 1.10.0",
     "vsock 0.4.0",
     "walkdir 2.3.3",
+    "walrus 0.21.1",
     "warp 0.3.7",
     "wasm-bindgen 0.2.87",
     "wasm-encoder 0.217.0",
