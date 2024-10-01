@@ -18,10 +18,10 @@ from model.team import Team
 
 SUPPORTED_TEAMS = (Team.NODE_TEAM, Team.BOUNDARY_NODE_TEAM)
 SLACK_CHANNEL_CONFIG_BY_TEAM = {
-    Team.NODE_TEAM: SlackChannelConfig(channel_id="C05CYLM94KU", channel="#eng-node-psec"),
-    Team.BOUNDARY_NODE_TEAM: SlackChannelConfig(channel_id="C06KQKZ3EBW", channel="#eng-boundary-nodes-psec"),
+    Team.NODE_TEAM: SlackChannelConfig(channel_id="C07ED83DN3V", channel="#eng-node-psec-testing"),
+    Team.BOUNDARY_NODE_TEAM: SlackChannelConfig(channel_id="C07EDBD7WJW", channel="#eng-boundary-nodes-psec-testing"),
 }
-SLACK_TEAM_GROUP_ID = {Team.NODE_TEAM: "<!subteam^S05FTRNRC5A>", Team.BOUNDARY_NODE_TEAM: "<!subteam^S0313LYB9FZ>"}
+SLACK_TEAM_GROUP_ID = {Team.NODE_TEAM: "<@U03JGGJBM7V>", Team.BOUNDARY_NODE_TEAM: "<@U03JGGJBM7V>"}
 
 SLACK_LOG_TO_CONSOLE = False
 

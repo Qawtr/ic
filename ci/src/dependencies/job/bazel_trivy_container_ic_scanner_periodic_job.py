@@ -37,7 +37,7 @@ REPOS_TO_SCAN = [
 
 
 def main():
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.DEBUG)
     if not is_env_for_periodic_job():
         logging.warning("skipping periodic TRIVY job because it is run in the wrong environment")
         return
@@ -60,7 +60,7 @@ def main():
         notify_on_scan_job_failed=notify_on_scan_job_failed,
         merge_request_base_url=get_ic_repo_merge_request_base_url(),
         ci_pipeline_base_url=get_ic_repo_ci_pipeline_base_url(),
-        notification_handlers=[SlackTrivyFindingNotificationHandler(), SlackDefaultNotificationHandler()],
+        notification_handlers=[],
     )
     notifier = NotificationCreator(config)
     finding_data_source_subscribers = [notifier]
