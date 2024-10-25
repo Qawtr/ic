@@ -102,9 +102,6 @@ build:check --output_groups=build_metadata
 
 # Fuzzing configuration
 build:fuzzing --action_env="SANITIZERS_ENABLED=1"
-# sanitizers are only supported in nightly
-build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
-build:fuzzing --build_tag_filters=fuzz_test
 # Ignoring transitions for now since it doesn't add any additional improvement to current setup
 build:fuzzing --//bazel:enable_fuzzing_code=True
 
