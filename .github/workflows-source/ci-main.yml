@@ -145,6 +145,14 @@ jobs:
           else
               BAZEL_EXTRA_ARGS+=" --keep_going"
           fi
+
+          if [[ 0000 =~ 0$ ]]; then
+              BAZEL_EXTRA_ARGS+=(
+                --remote_cache=grpc://10.107.199.28:9092
+                --experimental_remote_downloader=10.107.199.28:9092
+              )
+          fi
+
           # Export BAZEL_EXTRA_ARGS to environment
           echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
       - name: Run Bazel Test All
