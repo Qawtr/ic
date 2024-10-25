@@ -111,8 +111,11 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
         proc_macro_deps = proc_macro_deps,
         deps = deps,
         rustc_flags = rustc_flags + RUSTC_FLAGS_AFL,
+        rustc_env = {
+            "RUSTC_BOOTSTRAP": "1",
+        },
         tags = [
-            # Makes sure this target is not run in normal CI builds. It would fail due to non-nightly Rust toolchain.
+            # Used to filter out fuzzer tests
             "fuzz_test",
             "afl",
         ],
