@@ -106,14 +106,12 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
             "AFL_LLVM_LAF_ALL": "1",
             "AFL_USE_ASAN": "1",
             "AFL_USE_LSAN": "1",
+            "RUSTC_BOOTSTRAP": "1",
         },
         crate_features = crate_features + ["fuzzing"],
         proc_macro_deps = proc_macro_deps,
         deps = deps,
         rustc_flags = rustc_flags + RUSTC_FLAGS_AFL,
-        rustc_env = {
-            "RUSTC_BOOTSTRAP": "1",
-        },
         tags = [
             # Used to filter out fuzzer tests
             "fuzz_test",
