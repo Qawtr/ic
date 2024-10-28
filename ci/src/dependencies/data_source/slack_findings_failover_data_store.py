@@ -114,7 +114,7 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
     @staticmethod
     def _filter_vulns(vuln_by_vuln_id: Dict[str, VulnerabilityInfo], ignore_list_by_project: Dict[str, Set[str]]):
         # remove vulns with too low score
-        logging.debug(f"_filter_vulns called with ignore list {ignore_list_by_project} and findings:\n\n{vuln_by_vuln_id}")
+        logging.debug(f"_filter_vulns called with ignore list {ignore_list_by_project}")
         vuln_ids = list(vuln_by_vuln_id.keys())
         for vid in vuln_ids:
             if vuln_by_vuln_id[vid].vulnerability.score < VULNERABILITY_THRESHOLD_SCORE:
@@ -135,6 +135,8 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                                 logging.debug(f"proj {proj} is removed from finding {finding} for vulnerability {vi.vulnerability}")
                                 add_proj = False
                                 break
+                    else:
+                        logging.debug(f"finding {finding.id()} has a project that does not have an ignore list: {proj}")
                     if add_proj:
                         filtered_projects.append(proj)
                 if len(filtered_projects) == 0:
