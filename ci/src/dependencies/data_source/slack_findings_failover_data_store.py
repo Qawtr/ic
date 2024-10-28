@@ -114,6 +114,7 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
     @staticmethod
     def _filter_vulns(vuln_by_vuln_id: Dict[str, VulnerabilityInfo], ignore_list_by_project: Dict[str, Set[str]]):
         # remove vulns with too low score
+        logging.debug(f"_filter_vulns called with ignore list {ignore_list_by_project}")
         vuln_ids = list(vuln_by_vuln_id.keys())
         for vid in vuln_ids:
             if vuln_by_vuln_id[vid].vulnerability.score < VULNERABILITY_THRESHOLD_SCORE:
@@ -128,17 +129,21 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                 for proj in finding.projects:
                     add_proj = True
                     if proj in ignore_list_by_project:
+                        logging.debug(f"finding {finding.id()} has project on ignore list")
                         for expr in ignore_list_by_project[proj]:
                             if expr in vi.vulnerability.description:
+                                logging.debug(f"proj {proj} is removed from finding {finding} for vulnerability {vi.vulnerability}")
                                 add_proj = False
                                 break
                     if add_proj:
                         filtered_projects.append(proj)
                 if len(filtered_projects) == 0:
+                    logging.debug(f"finding {finding.id()} is marked for deletion")
                     findings_to_delete.add(finding.id())
                 else:
                     finding.projects = filtered_projects
             if len(findings_to_delete) == len(vi.finding_by_id):
+                logging.debug(f"vulnerability {vi.vulnerability.id} is marked for deletion")
                 vulns_to_delete.add(vi.vulnerability.id)
             else:
                 for finding_id in findings_to_delete:
