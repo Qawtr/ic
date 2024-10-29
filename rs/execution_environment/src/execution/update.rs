@@ -471,6 +471,7 @@ impl UpdateHelper {
                 .get()
                 .saturating_sub(output.num_instructions_left.get()),
         );
+        println!("instructions_used: {:?}", instructions_used);
         let (action, call_context) = self
             .canister
             .system_state

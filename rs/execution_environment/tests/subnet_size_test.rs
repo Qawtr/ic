@@ -1127,9 +1127,11 @@ fn test_subnet_size_execute_message_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
+    let instruction_cost = inc_instruction_cost(HypervisorConfig::default());
+    println!("instruction_cost: {:?}", instruction_cost);
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(inc_instruction_cost(HypervisorConfig::default())),
+        NumInstructions::from(instruction_cost),
         reference_subnet_size,
     );
 
@@ -1138,6 +1140,8 @@ fn test_subnet_size_execute_message_cost() {
         simulate_execute_message_cost(subnet_type, reference_subnet_size),
         reference_cost
     );
+
+    assert_eq!(1, 2);
 
     // Check if cost is increasing with subnet size.
     assert_lt!(
