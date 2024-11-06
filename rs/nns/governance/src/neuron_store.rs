@@ -1452,7 +1452,6 @@ fn groom_neurons(
     last_neuron_id
 }
 
-#[allow(unused)] // This line will be removed soon...
 pub fn prune_some_following(
     neuron_store: &mut NeuronStore,
     exclusive_lower_bound: NeuronId,
