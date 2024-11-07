@@ -1278,7 +1278,6 @@ impl NeuronStore {
         #[allow(clippy::large_enum_variant)]
         #[derive(Debug)]
         enum NeuronHandle<'a> {
-            // DO NOT MERGE - Use Cow to avoid unnecessary cloning.
             Owned { current: Neuron, original: Neuron },
             Borrowed(&'a mut Neuron),
         }
