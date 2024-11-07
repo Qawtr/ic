@@ -31,10 +31,24 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     curl \
     perl
 
-# Download and verify QEMU
+# Download >=9.1 qemu and extra requirements
 RUN cd /tmp/ && \
-    curl -L -O https://download.qemu.org/qemu-6.2.0.tar.xz && \
-    echo "68e15d8e45ac56326e0b9a4afa8b49a3dfe8aba3488221d098c84698bca65b45  qemu-6.2.0.tar.xz" > qemu.sha256 && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/n/nettle/libnettle8t64_3.10-1_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/n/nettle/libhogweed6t64_3.10-1_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/debian/pool/main/b/brltty/libbrlapi0.8_6.7-1_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/debian/pool/main/q/qemu/qemu-system-data_9.1.1+ds-2_all.deb && \
+    curl -L -O http://mirrors.kernel.org/debian/pool/main/q/qemu/qemu-system-common_9.1.1+ds-2_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/debian/pool/main/libj/libjpeg-turbo/libjpeg62-turbo_2.1.5-3+b1_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/g/gnutls28/libgnutls30t64_3.8.6-2ubuntu1_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/debian/pool/main/q/qemu/qemu-system-x86_9.1.1+ds-2_amd64.deb && \
+    echo "d86468a163e2792111d1550f8b5268e98bfb3aac8c5cac1ac838a17dfb0aadd6  libnettle8t64_3.10-1_amd64.deb" >> qemu.sha256 && \
+    echo "69c77010697337baa9f1cb68310e8d6ba5494b89e85ef727cfed52dde46318ee  libhogweed6t64_3.10-1_amd64.deb" >> qemu.sha256 && \
+    echo "c11049df22c2e201b62f3750d8c9cc99df5dead49872eca95b6a9ea3dde441df  libbrlapi0.8_6.7-1_amd64.deb" >> qemu.sha256 && \
+    echo "57b6e526ac030bd4e74e4a12bd0ddf42460ac0559f33436796230f82a0bc45f2  qemu-system-data_9.1.1+ds-2_all.deb" >> qemu.sha256 && \
+    echo "d665fcb4034912f89b9fe353385bc30171f442853fdddcb9cc3ccfffeed0557d  qemu-system-common_9.1.1+ds-2_amd64.deb" >> qemu.sha256 && \
+    echo "c24ef7f380b7756dcfac054c3a7d1729a1b24ed659a62fe11cb4ae8793d0a31d  libjpeg62-turbo_2.1.5-3+b1_amd64.deb" >> qemu.sha256 && \
+    echo "3180bdb96a896ce134b87ed2d47c484facc6cb419a6306d68e4cec7a5ff8c0ec  libgnutls30t64_3.8.6-2ubuntu1_amd64.deb" >> qemu.sha256 && \
+    echo "423a54943da4fef0c7b28575f9e8180a0aa9038539027b7abf01c17ba5f56830  qemu-system-x86_9.1.1+ds-2_amd64.deb" >> qemu.sha256 && \
     shasum -c qemu.sha256
 
 # Download >=6.11 kernel and modules
@@ -58,38 +72,6 @@ RUN cd /tmp/ && \
 
 #
 # Second build stage:
-# - Compile downloaded archives from first build stage
-#
-FROM ubuntu:24.04 AS build
-
-USER root:root
-
-ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-# Install QEMU build dependencies
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
-    ca-certificates \
-    build-essential \
-    libglib2.0-dev \
-    libpixman-1-dev \
-    libusb-1.0-0-dev \
-    ninja-build \
-    pkg-config \
-    python3 \
-    python3-setuptools
-
-# Configure and compile QEMU
-COPY --from=download /tmp/qemu-6.2.0.tar.xz /tmp/qemu-6.2.0.tar.xz
-RUN cd /tmp/ && \
-    tar xJf qemu-6.2.0.tar.xz && \
-    cd /tmp/qemu-6.2.0 && \
-    ./configure --target-list=x86_64-softmmu --enable-kvm --enable-libusb && \
-    echo "Compiling qemu..." && \
-    make -j 2 >/dev/null 2>&1 && \
-    DESTDIR="/out" ninja -C build install
-
-#
-# Third build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image.
 # - Install and cache upstream packages from built-in Ubuntu repositories.
 # - Install compiled packages from the second stage.
@@ -116,9 +98,33 @@ RUN apt-get -y update && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
 
-# Install QEMU
-COPY --from=build /out/usr/local/bin/qemu-system-x86_64 /usr/local/bin/
-COPY --from=build /out/usr/local/share/qemu /usr/local/share/qemu
+# Install >=9.1 qemu and extra requirements
+COPY --from=download /tmp/libnettle8t64_3.10-1_amd64.deb /tmp/libnettle8t64_3.10-1_amd64.deb
+COPY --from=download /tmp/libhogweed6t64_3.10-1_amd64.deb /tmp/libhogweed6t64_3.10-1_amd64.deb
+COPY --from=download /tmp/libbrlapi0.8_6.7-1_amd64.deb /tmp/libbrlapi0.8_6.7-1_amd64.deb
+COPY --from=download /tmp/qemu-system-data_9.1.1+ds-2_all.deb /tmp/qemu-system-data_9.1.1+ds-2_all.deb
+COPY --from=download /tmp/qemu-system-common_9.1.1+ds-2_amd64.deb /tmp/qemu-system-common_9.1.1+ds-2_amd64.deb
+COPY --from=download /tmp/libjpeg62-turbo_2.1.5-3+b1_amd64.deb /tmp/libjpeg62-turbo_2.1.5-3+b1_amd64.deb
+COPY --from=download /tmp/libgnutls30t64_3.8.6-2ubuntu1_amd64.deb /tmp/libgnutls30t64_3.8.6-2ubuntu1_amd64.deb
+COPY --from=download /tmp/qemu-system-x86_9.1.1+ds-2_amd64.deb /tmp/qemu-system-x86_9.1.1+ds-2_amd64.deb
+
+RUN apt-get install -y --no-install-recommends \
+    /tmp/libnettle8t64_3.10-1_amd64.deb \
+    /tmp/libhogweed6t64_3.10-1_amd64.deb \
+    /tmp/libbrlapi0.8_6.7-1_amd64.deb \
+    /tmp/qemu-system-data_9.1.1+ds-2_all.deb \
+    /tmp/qemu-system-common_9.1.1+ds-2_amd64.deb \
+    /tmp/libjpeg62-turbo_2.1.5-3+b1_amd64.deb \
+    /tmp/libgnutls30t64_3.8.6-2ubuntu1_amd64.deb \
+    /tmp/qemu-system-x86_9.1.1+ds-2_amd64.deb && \
+    rm /tmp/libnettle8t64_3.10-1_amd64.deb && \
+    rm /tmp/libhogweed6t64_3.10-1_amd64.deb && \
+    rm /tmp/libbrlapi0.8_6.7-1_amd64.deb && \
+    rm /tmp/qemu-system-data_9.1.1+ds-2_all.deb && \
+    rm /tmp/qemu-system-common_9.1.1+ds-2_amd64.deb && \
+    rm /tmp/libjpeg62-turbo_2.1.5-3+b1_amd64.deb && \
+    rm /tmp/libgnutls30t64_3.8.6-2ubuntu1_amd64.deb && \
+    rm /tmp/qemu-system-x86_9.1.1+ds-2_amd64.deb
 
 # Install >=6.11 kernel
 COPY --from=download /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb
