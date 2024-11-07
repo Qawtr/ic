@@ -51,6 +51,12 @@ RUN cd /tmp/ && \
     echo "423a54943da4fef0c7b28575f9e8180a0aa9038539027b7abf01c17ba5f56830  qemu-system-x86_9.1.1+ds-2_amd64.deb" >> qemu.sha256 && \
     shasum -c qemu.sha256
 
+# Download >=2024-05-24 OVMF
+RUN cd /tmp/ && \
+    curl -L -O http://mirrors.kernel.org/debian/pool/main/e/edk2/ovmf_2024.08-4_all.deb && \
+    echo "f19203f5eed55c37df3f175425ed4eae355a1380f68bf40b9ffb2bef3d7817cb  ovmf_2024.08-4_all.deb" >> ovmf.sha256 && \
+    shasum -c ovmf.sha256
+
 # Download >=6.11 kernel and modules
 RUN cd /tmp/ && \
     curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
@@ -125,6 +131,13 @@ RUN apt-get install -y --no-install-recommends \
     rm /tmp/libjpeg62-turbo_2.1.5-3+b1_amd64.deb && \
     rm /tmp/libgnutls30t64_3.8.6-2ubuntu1_amd64.deb && \
     rm /tmp/qemu-system-x86_9.1.1+ds-2_amd64.deb
+
+# Install >=2024-05-24 OVMF
+COPY --from=download /tmp/ovmf_2024.08-4_all.deb /tmp/ovmf_2024.08-4_all.deb
+
+RUN apt-get install -y --no-install-recommends \
+    /tmp/ovmf_2024.08-4_all.deb && \
+    rm /tmp/ovmf_2024.08-4_all.deb
 
 # Install >=6.11 kernel
 COPY --from=download /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb
