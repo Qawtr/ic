@@ -20,6 +20,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
+    data_migration::set_initial_voting_power_economics,
     decoder_config, encode_metrics,
     governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
@@ -409,8 +410,11 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
     );
 
     schedule_seeding(Duration::from_nanos(0));
+
+    let mut governance_proto = InternalGovernanceProto::from(init_payload);
+    set_initial_voting_power_economics(&mut governance_proto);
     set_governance(Governance::new(
-        InternalGovernanceProto::from(init_payload),
+        governance_proto,
         Box::new(CanisterEnv::new()),
         Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<CdkRuntime>::new()),
@@ -431,7 +435,7 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     println!("{}Executing post upgrade", LOG_PREFIX);
 
-    let restored_state = with_upgrades_memory(|memory| {
+    let mut restored_state = with_upgrades_memory(|memory| {
         let result: Result<InternalGovernanceProto, _> = load_protobuf(memory);
         result
     })
@@ -439,6 +443,9 @@ fn canister_post_upgrade() {
         "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
     );
+
+    // TODO(NNS1- DO NOT MERGE): This can be deleted after it has been released.
+    set_initial_voting_power_economics(&mut restored_state);
 
     grow_upgrades_memory_to(WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY);
 
