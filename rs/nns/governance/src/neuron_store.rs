@@ -8,7 +8,7 @@ use crate::{
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
-        GovernanceError, Neuron as NeuronProto, NeuronState, Topic,
+        GovernanceError, Neuron as NeuronProto, NeuronState, Topic, VotingPowerEconomics,
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
@@ -848,6 +848,7 @@ impl NeuronStore {
 
     pub fn create_ballots_for_standard_proposal(
         &self,
+        voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> (
         HashMap<u64, Ballot>,
@@ -866,7 +867,7 @@ impl NeuronStore {
                 return;
             }
 
-            let voting_power = neuron.deciding_voting_power(now_seconds);
+            let voting_power = neuron.deciding_voting_power(voting_power_economics, now_seconds);
             deciding_voting_power += voting_power as u128;
             potential_voting_power += neuron.potential_voting_power(now_seconds) as u128;
             ballots.insert(
