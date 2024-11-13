@@ -1139,7 +1139,7 @@ mod cast_vote_and_cascade_follow {
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, Ballot, Topic, Vote},
+        pb::v1::{neuron::Followees, Ballot, Topic, Vote, VotingPowerEconomics},
     };
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -1193,7 +1193,8 @@ mod cast_vote_and_cascade_follow {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let deciding_voting_power = neuron.deciding_voting_power(now);
+            let deciding_voting_power =
+                neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
             neuron_map.insert(id, neuron);
             ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
@@ -1243,7 +1244,9 @@ mod cast_vote_and_cascade_follow {
 
         let deciding_voting_power = |neuron_id| {
             neuron_store
-                .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
+                .with_neuron(&neuron_id, |n| {
+                    n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+                })
                 .unwrap()
         };
         assert_eq!(
@@ -1274,7 +1277,8 @@ mod cast_vote_and_cascade_follow {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let deciding_voting_power = neuron.deciding_voting_power(now);
+            let deciding_voting_power =
+                neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
             neuron_map.insert(id, neuron);
             ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
@@ -1312,7 +1316,9 @@ mod cast_vote_and_cascade_follow {
 
         let deciding_voting_power = |neuron_id| {
             neuron_store
-                .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
+                .with_neuron(&neuron_id, |n| {
+                    n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+                })
                 .unwrap()
         };
         assert_eq!(
@@ -1799,7 +1805,9 @@ fn test_compute_ballots_for_new_proposal() {
 
     let deciding_vote = |g: &Governance, id, now| {
         g.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.deciding_voting_power(now))
+            .with_neuron(&NeuronId { id }, |n| {
+                n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+            })
             .unwrap()
     };
     assert_eq!(tot_potential_voting_power, expected_potential_voting_power);
