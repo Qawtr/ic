@@ -10,6 +10,10 @@ use std::{
 };
 
 thread_local! {
+    // Use of a single shared struct to store the state machines prevents
+    // more than one state machine per proposal, which limits the overall
+    // memory usage for voting, which will be relevant when this can be used
+    // across multiple messages, which would cause the memory usage to accumulate.
     static VOTING_STATE_MACHINES: RefCell<VotingStateMachines> = RefCell::new(VotingStateMachines::new());
 }
 impl Governance {
@@ -20,30 +24,53 @@ impl Governance {
         vote_of_neuron: Vote,
         topic: Topic,
     ) {
-        let neuron_store = &mut self.neuron_store;
         let ballots = &mut self
             .heap_data
             .proposals
             .get_mut(&proposal_id.id)
             .unwrap()
             .ballots;
-        // Use of thread local storage to store the state machines prevents
-        // more than one state machine per proposal, which limits the overall
-        // memory usage for voting, which will be relevant when this can be used
-        // across multiple messages, which would cause the memory usage to accumulate.
+        // First we cast the ballot.
         VOTING_STATE_MACHINES.with(|vsm| {
             let mut voting_state_machines = vsm.borrow_mut();
             let proposal_voting_machine =
                 voting_state_machines.get_or_create_machine(proposal_id, topic);
 
             proposal_voting_machine.cast_vote(ballots, voting_neuron_id, vote_of_neuron);
-
-            while !proposal_voting_machine.is_done() {
-                proposal_voting_machine.continue_processing(neuron_store, ballots);
-            }
-
-            voting_state_machines.remove_if_done(&proposal_id);
         });
+
+        // Next we create a loop that re-aquires context and continues processing until done.
+        // Re-acquiring context is necessary because the state machines are stored in thread local
+        // but the ballots can change between messages (even though this is all in one call context)
+        // as the calculation is divided by a canister self-call.
+        let mut is_done = false;
+
+        while !is_done {
+            // Reacquire context
+            let neuron_store = &mut self.neuron_store;
+            let ballots = &mut self
+                .heap_data
+                .proposals
+                .get_mut(&proposal_id.id)
+                .unwrap()
+                .ballots;
+
+            // Now we process until either A we are done or B, we are over a limit and need to
+            // make a self-call
+            VOTING_STATE_MACHINES.with(|vsm| {
+                let mut voting_state_machines = vsm.borrow_mut();
+                let proposal_voting_machine =
+                    voting_state_machines.get_or_create_machine(proposal_id, topic);
+
+                proposal_voting_machine.cast_vote(ballots, voting_neuron_id, vote_of_neuron);
+
+                while !proposal_voting_machine.is_done() {
+                    proposal_voting_machine.continue_processing(neuron_store, ballots);
+                }
+
+                voting_state_machines.remove_if_done(&proposal_id);
+            });
+        }
     }
 }
 
