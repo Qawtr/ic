@@ -3,11 +3,20 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
 };
+use ic_cdk::api::{call_context_instruction_counter, instruction_counter};
+use ic_nervous_system_long_message::{
+    break_message_if_over_instructions, is_message_over_threshold,
+};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap},
 };
+
+const BILLION: u64 = 1_000_000_000;
+
+const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 30 * BILLION;
+const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 
 thread_local! {
     // Use of a single shared struct to store the state machines prevents
@@ -45,6 +54,10 @@ impl Governance {
         // as the calculation is divided by a canister self-call.
         let mut is_done = false;
 
+        fn over_soft_message_limit() -> bool {
+            is_message_over_threshold(SOFT_VOTING_INSTRUCTIONS_LIMIT)
+        }
+
         while !is_done {
             // Reacquire context
             let neuron_store = &mut self.neuron_store;
@@ -62,14 +75,23 @@ impl Governance {
                 let proposal_voting_machine =
                     voting_state_machines.get_or_create_machine(proposal_id, topic);
 
-                proposal_voting_machine.cast_vote(ballots, voting_neuron_id, vote_of_neuron);
-
-                while !proposal_voting_machine.is_done() {
+                is_done = proposal_voting_machine.is_done();
+                while !is_done {
                     proposal_voting_machine.continue_processing(neuron_store, ballots);
+                    is_done = proposal_voting_machine.is_done();
+
+                    if over_soft_message_limit() {
+                        break;
+                    }
                 }
 
                 voting_state_machines.remove_if_done(&proposal_id);
             });
+            break_message_if_over_instructions(
+                SOFT_VOTING_INSTRUCTIONS_LIMIT,
+                Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
+            )
+            .await;
         }
     }
 }
