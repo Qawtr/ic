@@ -1,7 +1,6 @@
-use ic_cdk::{
-    api::{call_context_instruction_counter, instruction_counter},
-    query,
-};
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::api::{call_context_instruction_counter, instruction_counter};
+use ic_cdk::query;
 
 #[cfg(not(target_arch = "wasm32"))]
 use ic_nervous_system_temporary::Temporary;
@@ -19,7 +18,7 @@ pub const LIMIT_FOR_SYSTEM_SUBNETS: u64 = 45 * B;
 
 #[cfg(not(target_arch = "wasm32"))]
 thread_local! {
-    static TEST_THRESHOLD_CALL_COUNTER: RefCell<u64> = RefCell::new(0);
+    static TEST_THRESHOLD_CALL_COUNTER: RefCell<u64> = const { RefCell::new(0) };
     static TEST_CALL_CONTEXT_OVER_LIMIT: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -34,6 +33,7 @@ pub fn is_message_over_threshold(_message_threshold: u64) -> bool {
     })
 }
 
+#[allow(dead_code)]
 #[cfg(not(target_arch = "wasm32"))]
 fn tempoarily_set_call_context_over_threshold() -> Temporary {
     Temporary::new(&TEST_CALL_CONTEXT_OVER_LIMIT, true)

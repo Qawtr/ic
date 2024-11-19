@@ -1,8 +1,6 @@
 use candid::CandidType;
 use ic_cdk::{init, update};
-use ic_nervous_system_long_message::{
-    break_message_if_over_instructions, run_chunked_task, Continuation,
-};
+use ic_nervous_system_long_message::break_message_if_over_instructions;
 use serde::Deserialize;
 use std::time::Duration;
 
