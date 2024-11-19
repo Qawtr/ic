@@ -58,6 +58,7 @@ impl Governance {
             is_message_over_threshold(SOFT_VOTING_INSTRUCTIONS_LIMIT)
         }
 
+        // TODO DO NOT MERGE How to test this?
         while !is_done {
             // Reacquire context
             let neuron_store = &mut self.neuron_store;
