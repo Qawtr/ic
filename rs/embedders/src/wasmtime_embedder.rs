@@ -9,7 +9,10 @@ use std::{
     cell::Ref,
     collections::HashMap,
     convert::TryFrom,
+    fs::File,
     mem::size_of,
+    os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
+    os::unix::fs::MetadataExt,
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
@@ -36,6 +39,7 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -329,6 +333,42 @@ impl WasmtimeEmbedder {
         serialized_module: &SerializedModuleBytes,
     ) -> HypervisorResult<InstancePre<StoreData>> {
         let module = self.deserialize_module(serialized_module)?;
+        self.pre_instantiate(&module)
+    }
+
+    fn deserialize_from_file(&self, serialized_module: &File) -> HypervisorResult<Module> {
+        // TODO: Use new Module::deserialize_open_file to not copy bytes.
+        let mmap_size = serialized_module.metadata().unwrap().size() as usize;
+        let mmap_ptr = unsafe {
+            mmap(
+                std::ptr::null_mut(),
+                mmap_size,
+                ProtFlags::PROT_READ,
+                MapFlags::MAP_PRIVATE,
+                serialized_module.as_raw_fd(),
+                0,
+            )
+        }
+        .unwrap_or_else(|err| panic!("Module deserialization failed: {:?}", err))
+            as *mut u8;
+        // TODO: Safety
+        let bytes = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
+        unsafe {
+            Module::deserialize(&self.create_engine()?, bytes).map_err(|err| {
+                HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
+                    format!("{:?}", err),
+                ))
+            })
+        }
+    }
+
+    pub fn read_file_and_pre_instantiate(
+        &self,
+        serialized_module: RawFd,
+    ) -> HypervisorResult<InstancePre<StoreData>> {
+        let file = unsafe { File::from_raw_fd(serialized_module) };
+        let module = self.deserialize_from_file(&file)?;
+        let _ = file.into_raw_fd();
         self.pre_instantiate(&module)
     }
 
