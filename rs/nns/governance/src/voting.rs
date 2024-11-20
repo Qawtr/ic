@@ -60,18 +60,18 @@ impl Governance {
 
         // TODO DO NOT MERGE How to test this?
         while !is_done {
-            // Reacquire context
-            let neuron_store = &mut self.neuron_store;
-            let ballots = &mut self
-                .heap_data
-                .proposals
-                .get_mut(&proposal_id.id)
-                .unwrap()
-                .ballots;
-
             // Now we process until either A we are done or B, we are over a limit and need to
             // make a self-call
             VOTING_STATE_MACHINES.with(|vsm| {
+                // Reacquire context
+                let neuron_store = &mut self.neuron_store;
+                let ballots = &mut self
+                    .heap_data
+                    .proposals
+                    .get_mut(&proposal_id.id)
+                    .unwrap()
+                    .ballots;
+
                 let mut voting_state_machines = vsm.borrow_mut();
                 let proposal_voting_machine =
                     voting_state_machines.get_or_create_machine(proposal_id, topic);
