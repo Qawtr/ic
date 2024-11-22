@@ -52,7 +52,6 @@ impl Governance {
             is_message_over_threshold(SOFT_VOTING_INSTRUCTIONS_LIMIT)
         }
 
-        // TODO DO NOT MERGE How to test this?
         while !is_done {
             // Now we process until either A we are done or B, we are over a limit and need to
             // make a self-call
@@ -78,6 +77,7 @@ impl Governance {
                     }
                 });
             });
+            // We send a no-op message to self to break up the call context into more messages
             break_message_if_over_instructions(
                 SOFT_VOTING_INSTRUCTIONS_LIMIT,
                 Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
@@ -555,4 +555,30 @@ mod test {
         state_machine.continue_processing(&mut neuron_store, &mut ballots);
         assert!(state_machine.is_done());
     }
+
+    // TODO DO NOT MERGE How to test this?
+    // What do I want to test?
+    // 1. That the loop continues until done
+    // 2. That the loop breaks if over the soft limit
+    // 3. That it panics if over the hard limit
+    // 4. That machine is cleaned up after it is done
+    // 5. That we process votes before recording votes, and allow soft limit to push recording votes into async/timer
+    // 6. That the timer will drain the queue of votes to record...
+    // 7. That we can't lose data if we have to panic (and the votes get recorded in the timer)
+    #[test]
+    fn test_cast_vote_and_cascade_follow_always_finishes_processing_ballots() {}
+    #[test]
+    fn test_cast_vote_and_cascade_follow_breaks_at_soft_limit() {}
+    #[test]
+    fn test_cast_vote_and_cascade_follow_panics_if_over_hard_limit() {}
+    #[test]
+    fn test_voting_machines_cleans_up_machines_that_are_finished() {}
+    #[test]
+    fn test_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit() {}
+    #[test]
+    fn test_cast_vote_and_cascade_follow_processes_votes_before_recording_recent_ballots() {}
+    #[test]
+    fn test_voting_machine_timer_eventually_drains_queue() {}
+    #[test]
+    fn test_panic_does_not_lose_data() {}
 }
