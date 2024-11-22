@@ -2,29 +2,25 @@ use crate::{
     governance::Governance,
     neuron_store::NeuronStore,
     pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
+    storage::with_voting_state_machines_mut,
 };
-use ic_cdk::api::{call_context_instruction_counter, instruction_counter};
 use ic_nervous_system_long_message::{
     break_message_if_over_instructions, is_message_over_threshold,
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
+use prost::Message;
 use std::{
+    borrow::Cow,
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap},
 };
 
 const BILLION: u64 = 1_000_000_000;
 
-const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 30 * BILLION;
+const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 2 * BILLION;
 const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 
-thread_local! {
-    // Use of a single shared struct to store the state machines prevents
-    // more than one state machine per proposal, which limits the overall
-    // memory usage for voting, which will be relevant when this can be used
-    // across multiple messages, which would cause the memory usage to accumulate.
-    static VOTING_STATE_MACHINES: RefCell<VotingStateMachines> = RefCell::new(VotingStateMachines::new());
-}
 impl Governance {
     pub async fn cast_vote_and_cascade_follow(
         &mut self,
@@ -33,19 +29,17 @@ impl Governance {
         vote_of_neuron: Vote,
         topic: Topic,
     ) {
-        let ballots = &mut self
-            .heap_data
-            .proposals
-            .get_mut(&proposal_id.id)
-            .unwrap()
-            .ballots;
         // First we cast the ballot.
-        VOTING_STATE_MACHINES.with(|vsm| {
-            let mut voting_state_machines = vsm.borrow_mut();
-            let proposal_voting_machine =
-                voting_state_machines.get_or_create_machine(proposal_id, topic);
-
-            proposal_voting_machine.cast_vote(ballots, voting_neuron_id, vote_of_neuron);
+        with_voting_state_machines_mut(|voting_state_machines| {
+            let ballots = &mut self
+                .heap_data
+                .proposals
+                .get_mut(&proposal_id.id)
+                .unwrap()
+                .ballots;
+            voting_state_machines.with_machine(proposal_id, topic, |machine| {
+                machine.cast_vote(ballots, voting_neuron_id, vote_of_neuron)
+            });
         });
 
         // Next we create a loop that re-aquires context and continues processing until done.
@@ -62,7 +56,7 @@ impl Governance {
         while !is_done {
             // Now we process until either A we are done or B, we are over a limit and need to
             // make a self-call
-            VOTING_STATE_MACHINES.with(|vsm| {
+            with_voting_state_machines_mut(|voting_state_machines| {
                 // Reacquire context
                 let neuron_store = &mut self.neuron_store;
                 let ballots = &mut self
@@ -72,21 +66,17 @@ impl Governance {
                     .unwrap()
                     .ballots;
 
-                let mut voting_state_machines = vsm.borrow_mut();
-                let proposal_voting_machine =
-                    voting_state_machines.get_or_create_machine(proposal_id, topic);
+                voting_state_machines.with_machine(proposal_id, topic, |machine| {
+                    is_done = machine.is_done();
+                    while !is_done {
+                        machine.continue_processing(neuron_store, ballots);
+                        is_done = machine.is_done();
 
-                is_done = proposal_voting_machine.is_done();
-                while !is_done {
-                    proposal_voting_machine.continue_processing(neuron_store, ballots);
-                    is_done = proposal_voting_machine.is_done();
-
-                    if over_soft_message_limit() {
-                        break;
+                        if over_soft_message_limit() {
+                            break;
+                        }
                     }
-                }
-
-                voting_state_machines.remove_if_done(&proposal_id);
+                });
             });
             break_message_if_over_instructions(
                 SOFT_VOTING_INSTRUCTIONS_LIMIT,
@@ -97,36 +87,51 @@ impl Governance {
     }
 }
 
-struct VotingStateMachines {
+pub(crate) struct VotingStateMachines<Memory>
+where
+    Memory: ic_stable_structures::Memory,
+{
     // Up to one machine per proposal, to avoid having to do unnecessary checks for followers that
     // might follow.  This allows the state machines to be used across multiple messages
     // without duplicating state and memory usage.
-    machines: BTreeMap<ProposalId, ProposalVotingStateMachine>,
+    machines: StableBTreeMap<ProposalId, crate::pb::v1::ProposalVotingStateMachine, Memory>,
 }
 
-impl VotingStateMachines {
-    fn new() -> Self {
+impl<Memory: ic_stable_structures::Memory> VotingStateMachines<Memory> {
+    pub(crate) fn new(memory: Memory) -> Self {
         Self {
-            machines: BTreeMap::new(),
+            machines: StableBTreeMap::init(memory),
         }
     }
 
-    fn get_or_create_machine(
+    /// Perform a callback with a given voting machine.  If the machine is finished, it is removed
+    /// after the callback.
+    fn with_machine<R>(
         &mut self,
         proposal_id: ProposalId,
         topic: Topic,
-    ) -> &mut ProposalVotingStateMachine {
-        self.machines
-            .entry(proposal_id)
-            .or_insert_with(|| ProposalVotingStateMachine::try_new(proposal_id, topic).unwrap())
-    }
+        callback: impl FnOnce(&mut ProposalVotingStateMachine) -> R,
+    ) -> R {
+        // We use remove here because we delete machines if they're done.
+        // This reduces stable memory calls in the case where the machine is completed,
+        // as we do not need to get it and then remove it later.
+        let mut machine = self
+            .machines
+            .remove(&proposal_id)
+            // This unwrap should be safe because we only write valid machines below.
+            .map(|proto| ProposalVotingStateMachine::try_from(proto).unwrap())
+            .unwrap_or(ProposalVotingStateMachine::try_new(proposal_id, topic).unwrap());
 
-    fn remove_if_done(&mut self, proposal_id: &ProposalId) {
-        if let Some(machine) = self.machines.get(proposal_id) {
-            if machine.is_done() {
-                self.machines.remove(proposal_id);
-            }
+        let result = callback(&mut machine);
+
+        // Save the machine again if it's not finished.
+        if !machine.is_done() {
+            self.machines.insert(
+                proposal_id,
+                crate::pb::v1::ProposalVotingStateMachine::from(machine),
+            );
         }
+        result
     }
 }
 
@@ -142,6 +147,59 @@ struct ProposalVotingStateMachine {
     followers_to_check: BTreeSet<NeuronId>,
     // votes that need to be recorded in each neuron's recent_ballots
     recent_neuron_ballots_to_record: BTreeMap<NeuronId, Vote>,
+}
+
+impl From<ProposalVotingStateMachine> for crate::pb::v1::ProposalVotingStateMachine {
+    fn from(value: ProposalVotingStateMachine) -> Self {
+        Self {
+            proposal_id: Some(value.proposal_id),
+            topic: value.topic as i32,
+            neurons_to_check_followers: value.neurons_to_check_followers.into_iter().collect(),
+            followers_to_check: value.followers_to_check.into_iter().collect(),
+            recent_neuron_ballots_to_record: value
+                .recent_neuron_ballots_to_record
+                .into_iter()
+                .map(|(n, v)| (n.id, v as i32))
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<crate::pb::v1::ProposalVotingStateMachine> for ProposalVotingStateMachine {
+    type Error = String;
+
+    fn try_from(value: crate::pb::v1::ProposalVotingStateMachine) -> Result<Self, Self::Error> {
+        Ok(Self {
+            proposal_id: value.proposal_id.ok_or("Proposal ID must be specified")?,
+            topic: Topic::try_from(value.topic).map_err(|e| e.to_string())?,
+            neurons_to_check_followers: value.neurons_to_check_followers.into_iter().collect(),
+            followers_to_check: value.followers_to_check.into_iter().collect(),
+            recent_neuron_ballots_to_record: value
+                .recent_neuron_ballots_to_record
+                .into_iter()
+                .map(|(n, v)| {
+                    let neuron_id = NeuronId::from_u64(n);
+                    let vote = Vote::try_from(v).map_err(|e| e.to_string())?; // Propagate the error directly
+                    Ok((neuron_id, vote))
+                })
+                .collect::<Result<_, Self::Error>>()?,
+        })
+    }
+}
+
+impl Storable for crate::pb::v1::ProposalVotingStateMachine {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::from(self.encode_to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        Self::decode(&bytes[..])
+            // Convert from Result to Self. (Unfortunately, it seems that
+            // panic is unavoid able in the case of Err.)
+            .expect("Unable to deserialize ProposalVotingStateMachine.")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl ProposalVotingStateMachine {
