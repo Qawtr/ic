@@ -3,7 +3,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
+load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
@@ -356,6 +356,20 @@ def icos_build(
         tags = ["manual"],
     )
 
+    sha256sum(
+        name = "disk-img.tar.zst.sha256",
+        srcs = [":disk-img.tar.zst"],
+        visibility = visibility,
+        tags = ["manual"],
+    )
+
+    sha256sum2url(
+        name = "disk-img.tar.zst.cas-url",
+        src = ":disk-img.tar.zst.sha256",
+        visibility = visibility,
+        tags = ["manual"],
+    )
+
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
@@ -377,6 +391,20 @@ def icos_build(
             tags = ["manual"],
         )
 
+        sha256sum(
+            name = "update-img.tar.zst.sha256",
+            srcs = [":update-img.tar.zst"],
+            visibility = visibility,
+            tags = ["manual"],
+        )
+
+        sha256sum2url(
+            name = "update-img.tar.zst.cas-url",
+            src = ":update-img.tar.zst.sha256",
+            visibility = visibility,
+            tags = ["manual"],
+        )
+
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
@@ -391,6 +419,20 @@ def icos_build(
         zstd_compress(
             name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
+            visibility = visibility,
+            tags = ["manual"],
+        )
+
+        sha256sum(
+            name = "update-img-test.tar.zst.sha256",
+            srcs = [":update-img-test.tar.zst"],
+            visibility = visibility,
+            tags = ["manual"],
+        )
+
+        sha256sum2url(
+            name = "update-img-test.tar.zst.cas-url",
+            src = ":update-img-test.tar.zst.sha256",
             visibility = visibility,
             tags = ["manual"],
         )
@@ -496,16 +538,16 @@ EOF
         data = [
             "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-            ":disk-img.tar.zst",
+            ":disk-img.tar.zst.cas-url",
+            ":disk-img.tar.zst.sha256",
             ":version.txt",
-            "//bazel:upload_systest_dep",
         ],
         env = {
             "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
-            "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
             "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
             "VERSION_FILE": "$(location :version.txt)",
-            "DISK_IMG": "$(location :disk-img.tar.zst)",
+            "URL_FILE": "$(location :disk-img.tar.zst.cas-url)",
+            "SHA_FILE": "$(location :disk-img.tar.zst.sha256)",
         },
         testonly = True,
         tags = ["manual"],
@@ -808,6 +850,20 @@ EOF
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
+        visibility = visibility,
+        tags = ["manual"],
+    )
+
+    sha256sum(
+        name = "disk-img.tar.zst.sha256",
+        srcs = [":disk-img.tar.zst"],
+        visibility = visibility,
+        tags = ["manual"],
+    )
+
+    sha256sum2url(
+        name = "disk-img.tar.zst.cas-url",
+        src = ":disk-img.tar.zst.sha256",
         visibility = visibility,
         tags = ["manual"],
     )
