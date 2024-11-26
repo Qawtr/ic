@@ -57,6 +57,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
+    cell::RefCell,
     str::FromStr,
     time::{Duration, SystemTime},
 };
@@ -82,7 +83,9 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 //
 // Do not access these global variables directly. Instead, use accessor
 // functions, which are defined immediately after.
-static mut GOVERNANCE: Option<Governance> = None;
+thread_local! {
+    static GOVERNANCE: RefCell<Option<Governance>> = RefCell::new(None);
+}
 
 /*
 Recommendations for Using `unsafe` in the Governance canister:
@@ -131,7 +134,12 @@ are best practices for making use of the unsafe block:
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance() -> &'static Governance {
-    unsafe { GOVERNANCE.as_ref().expect("Canister not initialized!") }
+    unsafe {
+        &*GOVERNANCE.with(|g| {
+            let ptr = g.as_ptr();
+            (*ptr).as_ref().expect("Canister not initialized!")
+        })
+    }
 }
 
 /// Returns a mutable reference to the global state.
@@ -139,19 +147,22 @@ fn governance() -> &'static Governance {
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance_mut() -> &'static mut Governance {
-    unsafe { GOVERNANCE.as_mut().expect("Canister not initialized!") }
+    unsafe {
+        &mut *GOVERNANCE.with(|g| {
+            let ptr = g.as_ptr();
+            (*ptr).as_mut().expect("Canister not initialized!")
+        })
+    }
 }
 
 // Sets governance global state to the given object.
 fn set_governance(gov: Governance) {
-    unsafe {
-        assert!(
-            GOVERNANCE.is_none(),
-            "{}Trying to initialize an already-initialized governance canister!",
-            LOG_PREFIX
-        );
-        GOVERNANCE = Some(gov);
-    }
+    assert!(
+        GOVERNANCE.with(|g| g.borrow().is_none()),
+        "{}Trying to initialize an already-initialized governance canister!",
+        LOG_PREFIX
+    );
+    GOVERNANCE.with(|g| *g.borrow_mut() = Some(gov));
 
     governance()
         .validate()
