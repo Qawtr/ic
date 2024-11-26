@@ -1,6 +1,6 @@
 use candid::CandidType;
 use ic_cdk::{init, update};
-use ic_nervous_system_long_message::break_message_if_over_instructions;
+use ic_nervous_system_long_message::noop_self_call_if_over_instructions;
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -65,7 +65,7 @@ async fn test_next_message_if_over_instructions(params: BreakMessageParams) {
         // Fib(17) was benchmarked at about 80k instructions
         fib(17);
         if use_break {
-            break_message_if_over_instructions(message_threshold, upper_bound).await;
+            noop_self_call_if_over_instructions(message_threshold, upper_bound).await;
         }
     }
 }

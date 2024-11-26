@@ -161,6 +161,7 @@ fn set_governance(gov: Governance) {
 fn schedule_timers() {
     schedule_seeding(Duration::from_nanos(0));
     schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
+    schedule_vote_processing(Duration::from_nanos(0));
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
@@ -213,6 +214,16 @@ fn schedule_adjust_neurons_storage(delay: Duration, start_neuron_id: NeuronIdPro
                 NeuronIdProto { id: 0 },
             ),
         };
+    });
+}
+
+/// The interval at which the voting state machines are processed.
+const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
+
+fn schedule_vote_processing(delay: Duration) {
+    ic_cdk_timers::set_timer(delay, || {
+        governance_mut().process_voting_state_machines();
+        schedule_vote_processing(VOTE_PROCESSING_INTERVAL);
     });
 }
 

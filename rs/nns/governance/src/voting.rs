@@ -5,10 +5,11 @@ use crate::{
     storage::with_voting_state_machines_mut,
 };
 use ic_nervous_system_long_message::{
-    break_message_if_over_instructions, is_message_over_threshold,
+    is_message_over_threshold, noop_self_call_if_over_instructions,
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
+use maplit::btreeset;
 use prost::Message;
 use std::{
     borrow::Cow,
@@ -20,8 +21,19 @@ const BILLION: u64 = 1_000_000_000;
 const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 2 * BILLION;
 const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 
+#[cfg(not(test))]
 fn over_soft_message_limit() -> bool {
     is_message_over_threshold(SOFT_VOTING_INSTRUCTIONS_LIMIT)
+}
+
+#[cfg(test)]
+thread_local! {
+    static OVER_SOFT_MESSAGE_LIMIT: std::cell::Cell<bool> = std::cell::Cell::new(true);
+}
+
+#[cfg(test)]
+fn over_soft_message_limit() -> bool {
+    OVER_SOFT_MESSAGE_LIMIT.with(|over| over.get())
 }
 
 impl Governance {
@@ -49,12 +61,12 @@ impl Governance {
             // make a self-call
             with_voting_state_machines_mut(|voting_state_machines| {
                 voting_state_machines.with_machine(proposal_id, topic, |machine| {
-                    self.process_machine_until_soft_limit(machine);
+                    self.process_machine_until_soft_limit(machine, over_soft_message_limit);
                     is_voting_finished = machine.is_voting_finished();
                 });
             });
             // We send a no-op message to self to break up the call context into more messages
-            break_message_if_over_instructions(
+            noop_self_call_if_over_instructions(
                 SOFT_VOTING_INSTRUCTIONS_LIMIT,
                 Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
             )
@@ -84,7 +96,11 @@ impl Governance {
     }
 
     /// Process a single voting state machine until it is over the soft limit, then return
-    fn process_machine_until_soft_limit(&mut self, machine: &mut ProposalVotingStateMachine) {
+    fn process_machine_until_soft_limit(
+        &mut self,
+        machine: &mut ProposalVotingStateMachine,
+        is_over_soft_limit: fn() -> bool,
+    ) {
         let proposal_id = machine.proposal_id;
         while !machine.is_completely_finished() {
             machine.continue_processing(
@@ -95,10 +111,10 @@ impl Governance {
                     .get_mut(&proposal_id.id)
                     .unwrap()
                     .ballots,
-                over_soft_message_limit,
+                is_over_soft_limit,
             );
 
-            if over_soft_message_limit() {
+            if is_over_soft_limit() {
                 break;
             }
         }
@@ -107,13 +123,28 @@ impl Governance {
     /// Process all voting state machines.  This function is called in the timer job.
     /// It processes voting state machines until the soft limit is reached.
     pub fn process_voting_state_machines(&mut self) {
-        with_voting_state_machines_mut(|voting_state_machines| {
-            while !over_soft_message_limit() {
-                voting_state_machines.with_next_machine(|(proposal_id, machine)| {
-                    self.process_machine_until_soft_limit(machine);
-                });
+        let mut proposals_processed = btreeset! {};
+        with_voting_state_machines_mut(|voting_state_machines| loop {
+            if voting_state_machines
+                .with_next_machine(|(proposal_id, machine)| {
+                    // We need to keep track of which proposals we processed
+                    proposals_processed.insert(proposal_id.id);
+                    self.process_machine_until_soft_limit(machine, over_soft_message_limit);
+                })
+                .is_none()
+            {
+                break;
+            };
+
+            if over_soft_message_limit() {
+                break;
             }
         });
+        // TODO DO NOT MERGE Is this needed here?  It's also processed
+        // in the heartbeats.
+        for proposal_id in proposals_processed {
+            self.process_proposal(proposal_id);
+        }
     }
 }
 
@@ -322,19 +353,22 @@ impl ProposalVotingStateMachine {
         }
     }
 
-    fn continue_processing<F>(
+    fn continue_processing(
         &mut self,
         neuron_store: &mut NeuronStore,
         ballots: &mut HashMap<u64, Ballot>,
-        is_over_instructions_limit: F,
-    ) where
-        F: Fn() -> bool,
-    {
+        is_over_instructions_limit: fn() -> bool,
+    ) {
         let voting_finished = self.is_voting_finished();
 
         if !voting_finished {
             while let Some(neuron_id) = self.neurons_to_check_followers.pop_first() {
                 self.add_followers_to_check(neuron_store, neuron_id, self.topic);
+
+                // Before we check the next one, see if we're over the limit.
+                if is_over_instructions_limit() {
+                    return;
+                }
             }
 
             // Memory optimization, will not cause tests to fail if removed
@@ -357,6 +391,11 @@ impl ProposalVotingStateMachine {
                 // voting resolution take fewer iterations.
                 // Vote::Unspecified is ignored by cast_vote.
                 self.cast_vote(ballots, follower, vote);
+
+                // Before we check the next one, see if we're over the limit.
+                if is_over_instructions_limit() {
+                    return;
+                }
             }
         } else {
             while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
@@ -374,6 +413,11 @@ impl ProposalVotingStateMachine {
                         eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
                     }
                 };
+
+                // Before we record the next one, see if we're over the limit.
+                if is_over_instructions_limit() {
+                    return;
+                }
             }
         }
     }
@@ -1056,7 +1100,6 @@ mod test {
             .unwrap();
 
         with_voting_state_machines_mut(|voting_state_machines| {
-            // We are asserting here that the machine is cleaned up after it is done.
             assert!(!voting_state_machines.machines.is_empty(),);
         });
 
@@ -1075,8 +1118,9 @@ mod test {
         }
 
         // Now let's run the "timer job" to make sure it eventually drains everything.
-        governance.process_voting_state_machines();
-        governance.process_voting_state_machines();
+        for _ in 1..20 {
+            governance.process_voting_state_machines();
+        }
 
         with_voting_state_machines_mut(|voting_state_machines| {
             // We are asserting here that the machine is cleaned up after it is done.

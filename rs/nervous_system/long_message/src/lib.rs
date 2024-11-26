@@ -75,7 +75,7 @@ fn is_call_context_over_threshold(call_context_threshold: u64) -> bool {
 /// dangerous in places where global state is being referenced.
 ///
 /// # Panics if the number of instructions used exceeds the given panic threshold.
-pub async fn break_message_if_over_instructions(
+pub async fn noop_self_call_if_over_instructions(
     message_threshold: u64,
     panic_threshold: Option<u64>,
 ) {
