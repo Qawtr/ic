@@ -18,7 +18,13 @@ use std::{
 
 const BILLION: u64 = 1_000_000_000;
 
-const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 2 * BILLION;
+#[cfg(not(feature = "test"))]
+const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 1 * BILLION;
+
+// For tests, we want this low so that we can observe the edge behaviors of cast_vote_and_cascade_follow
+// in integration tests, namely only recording votes, and not recent ballots when limits are hit.
+#[cfg(feature = "test")]
+const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 1_000_000;
 const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 
 #[cfg(not(test))]
