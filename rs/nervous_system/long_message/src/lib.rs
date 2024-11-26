@@ -25,6 +25,8 @@ thread_local! {
 #[cfg(not(target_arch = "wasm32"))]
 async fn make_noop_call() {}
 
+/// In non-wasm environments, this returns true/false alternatingly so logic can be
+/// shown to be resilient to being interrupted by the message threshold.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn is_message_over_threshold(_message_threshold: u64) -> bool {
     TEST_THRESHOLD_CALL_COUNTER.with(|c| {
@@ -35,7 +37,7 @@ pub fn is_message_over_threshold(_message_threshold: u64) -> bool {
 
 #[allow(dead_code)]
 #[cfg(not(target_arch = "wasm32"))]
-fn tempoarily_set_call_context_over_threshold() -> Temporary {
+pub fn in_test_temporarily_set_call_context_over_threshold() -> Temporary {
     Temporary::new(&TEST_CALL_CONTEXT_OVER_LIMIT, true)
 }
 
@@ -72,10 +74,13 @@ fn is_call_context_over_threshold(call_context_threshold: u64) -> bool {
 /// Note: Caller is responsible for validity of references across message bounds.  This could be
 /// dangerous in places where global state is being referenced.
 ///
-/// # Panics if the number of instructions used exceeds the given upper bound.
-pub async fn break_message_if_over_instructions(message_threshold: u64, upper_bound: Option<u64>) {
+/// # Panics if the number of instructions used exceeds the given panic threshold.
+pub async fn break_message_if_over_instructions(
+    message_threshold: u64,
+    panic_threshold: Option<u64>,
+) {
     // first we check the upper bound to see if we should panic.
-    if let Some(upper_bound) = upper_bound {
+    if let Some(upper_bound) = panic_threshold {
         if is_call_context_over_threshold(upper_bound) {
             panic!(
                 "Canister call exceeded the limit of {} instructions in the call context.",
