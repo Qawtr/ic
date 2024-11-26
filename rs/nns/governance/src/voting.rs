@@ -69,6 +69,7 @@ impl Governance {
                 });
             });
             // We send a no-op message to self to break up the call context into more messages
+            #[cfg(not(feature = "canbench-rs"))]
             noop_self_call_if_over_instructions(
                 SOFT_VOTING_INSTRUCTIONS_LIMIT,
                 Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
