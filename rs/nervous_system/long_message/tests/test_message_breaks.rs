@@ -6,7 +6,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{NumInstructions, PrincipalId};
 use serde::Deserialize;
-use std::time::Duration;
 
 #[derive(CandidType, Deserialize)]
 struct BreakMessageParams {

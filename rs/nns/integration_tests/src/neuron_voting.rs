@@ -351,7 +351,7 @@ fn neuron_with_followees(
     Neuron {
         id: Some(neuron_id),
         controller: Some(PrincipalId::new_user_test_id(id)),
-        hot_keys: vec![TEST_NEURON_1_OWNER_PRINCIPAL.clone()],
+        hot_keys: vec![*TEST_NEURON_1_OWNER_PRINCIPAL],
         // Use large values to avoid the possibility of collisions with other self-authenticating hotkeys
         dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
         cached_neuron_stake_e8s: 1_000_000_000,
@@ -365,7 +365,7 @@ fn neuron_with_followees(
 #[test]
 fn test_voting_can_span_multiple_rounds() {
     let topic = Topic::ProtocolCanisterManagement;
-    let neurons = (1..1000u64).into_iter().map(|i| {
+    let neurons = (1..1000u64).map(|i| {
         let followees = if i != 1 {
         hashmap! {topic as i32 => Followees { followees: vec![NeuronId { id: i -1 }] }}
         } else {
@@ -398,7 +398,7 @@ fn test_voting_can_span_multiple_rounds() {
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ListNeurons {
-            neuron_ids: (0..1000u64).into_iter().collect(),
+            neuron_ids: (0..1000u64).collect(),
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
@@ -423,7 +423,7 @@ fn test_voting_can_span_multiple_rounds() {
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ListNeurons {
-            neuron_ids: (0..1000u64).into_iter().collect(),
+            neuron_ids: (0..1000u64).collect(),
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,

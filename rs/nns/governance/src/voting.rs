@@ -4,9 +4,9 @@ use crate::{
     pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
     storage::with_voting_state_machines_mut,
 };
-use ic_nervous_system_long_message::{
-    is_message_over_threshold, noop_self_call_if_over_instructions,
-};
+#[cfg(not(test))]
+use ic_nervous_system_long_message::is_message_over_threshold;
+use ic_nervous_system_long_message::noop_self_call_if_over_instructions;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
 use maplit::btreeset;
@@ -18,14 +18,16 @@ use std::{
 
 const BILLION: u64 = 1_000_000_000;
 
+const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
+
+// For production, we want this higher so that we can process more votes, but without affecting
+// the overall responsiveness of the canister. 1 Billion seems like a reasonable compromise.
 #[cfg(not(feature = "test"))]
 const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 1 * BILLION;
-
 // For tests, we want this low so that we can observe the edge behaviors of cast_vote_and_cascade_follow
 // in integration tests, namely only recording votes, and not recent ballots when limits are hit.
 #[cfg(feature = "test")]
 const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 1_000_000;
-const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 
 #[cfg(not(test))]
 fn over_soft_message_limit() -> bool {
@@ -33,13 +35,8 @@ fn over_soft_message_limit() -> bool {
 }
 
 #[cfg(test)]
-thread_local! {
-    static OVER_SOFT_MESSAGE_LIMIT: std::cell::Cell<bool> = std::cell::Cell::new(true);
-}
-
-#[cfg(test)]
 fn over_soft_message_limit() -> bool {
-    OVER_SOFT_MESSAGE_LIMIT.with(|over| over.get())
+    true
 }
 
 impl Governance {
@@ -499,30 +496,6 @@ mod test {
         )
         .with_followees(followees)
         .with_cached_neuron_stake_e8s(cached_neuron_stake_e8s)
-        .build()
-    }
-
-    fn make_test_neuron_with_followees(
-        id: u64,
-        topic: Topic,
-        followees: Vec<u64>,
-        aging_since_timestamp_seconds: u64,
-    ) -> Neuron {
-        NeuronBuilder::new(
-            NeuronId { id },
-            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
-            PrincipalId::new_user_test_id(1),
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-                aging_since_timestamp_seconds,
-            },
-            123_456_789,
-        )
-        .with_followees(hashmap! {
-            topic as i32 => Followees {
-                followees: followees.into_iter().map(|id| NeuronId { id }).collect()
-            }
-        })
         .build()
     }
 

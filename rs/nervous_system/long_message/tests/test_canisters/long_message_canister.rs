@@ -2,30 +2,9 @@ use candid::CandidType;
 use ic_cdk::{init, update};
 use ic_nervous_system_long_message::noop_self_call_if_over_instructions;
 use serde::Deserialize;
-use std::time::Duration;
-
-struct Data {
-    values: Vec<u64>,
-}
-
-static mut UNSAFE_DATA_FOR_JOB_RUNNER: Option<Data> = None;
 
 #[init]
-fn canister_init() {
-    unsafe {
-        UNSAFE_DATA_FOR_JOB_RUNNER = Some(Data {
-            values: vec![17; 12],
-        })
-    };
-    // println!("long_message_canister init!");
-    ic_cdk_timers::set_timer(Duration::from_millis(1), || unsafe {
-        // println!("Setting new values");
-        let new_values = vec![18; 6];
-        *UNSAFE_DATA_FOR_JOB_RUNNER
-            .as_mut()
-            .expect("data not initialized") = Data { values: new_values };
-    });
-}
+fn canister_init() {}
 
 #[derive(CandidType, Deserialize)]
 struct BreakMessageParams {
