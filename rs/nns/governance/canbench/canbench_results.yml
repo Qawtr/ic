@@ -25,31 +25,31 @@ benches:
     scopes: {}
   cascading_vote_all_heap:
     total:
-      instructions: 32050651
+      instructions: 32057090
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   cascading_vote_heap_neurons_stable_index:
     total:
-      instructions: 54184080
+      instructions: 54190519
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   cascading_vote_stable_everything:
     total:
-      instructions: 149675290
+      instructions: 149681729
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   cascading_vote_stable_neurons_with_heap_index:
     total:
-      instructions: 127477791
+      instructions: 127484230
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   centralized_following_all_stable:
     total:
-      instructions: 32254613
+      instructions: 33186751
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
@@ -103,7 +103,7 @@ benches:
     scopes: {}
   single_vote_all_stable:
     total:
-      instructions: 148862
+      instructions: 148849
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
