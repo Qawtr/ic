@@ -134,7 +134,7 @@ impl Governance {
         &self,
         request: GetUpgradeJournalRequest,
     ) -> GetUpgradeJournalResponse {
-        const DEFAULT_MAX_ENTRIES: u32 = 1000;
+        const DEFAULT_MAX_ENTRIES: u32 = 100;
         let max_entries = request
             .max_entries
             .map(|n| n.min(DEFAULT_MAX_ENTRIES))

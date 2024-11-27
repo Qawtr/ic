@@ -2273,7 +2273,7 @@ message UpgradeJournal {
 // It is being implemented as part of the "effortless SNS upgrade" feature.
 message GetUpgradeJournalRequest {
   // Maximum number of journal entries to return, from newest to oldest.
-  // If not specified, defaults to 1000. Values larger than 1000 will be capped at 1000.
+  // If not specified, defaults to 100. Values larger than 100 will be capped at 100.
   optional uint32 max_entries = 1;
 }
 
