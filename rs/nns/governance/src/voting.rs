@@ -22,9 +22,9 @@ const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 // For production, we want this higher so that we can process more votes, but without affecting
 // the overall responsiveness of the canister. 1 Billion seems like a reasonable compromise.
 const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = if cfg!(feature = "test") {
-    1_000_000_000_000_000
+    1_000_000
 } else {
-    20 * BILLION
+    BILLION
 };
 
 #[cfg(not(test))]
@@ -48,25 +48,22 @@ impl Governance {
         // First we cast the ballot.
         self.record_neuron_vote(proposal_id, voting_neuron_id, vote_of_neuron, topic);
 
-        // Next we create a loop that re-aquires context and continues processing until done.
-        // Re-acquiring context is necessary because the state machines are stored in thread local
-        // but the ballots can change between messages (even though this is all in one call context)
-        // as the calculation is divided by a canister self-call.
+        // We process until voting is finished, and then do any other work that fits into the soft
+        // limit of the current message.  Votes are guaranteed to be recorded before the function
+        // returns, but recent_ballots for neurons might be recorded later in a timer job.  This
+        // ensures we return to the caller in a reasonable amount of time.
         let mut is_voting_finished = false;
 
-        // If we need to break it up into multiple messages, we only want to do the
-        // essential work before returning to the caller.  Recording recent ballots can be done
-        // in the timer job.
         while !is_voting_finished {
-            // Now we process until either A we are done or B, we are over a limit and need to
-            // make a self-call
+            // Now we process until we are done or we are over a limit and need to
+            // make a self-call.
             with_voting_state_machines_mut(|voting_state_machines| {
                 voting_state_machines.with_machine(proposal_id, topic, |machine| {
                     self.process_machine_until_soft_limit(machine, over_soft_message_limit);
                     is_voting_finished = machine.is_voting_finished();
                 });
             });
-            // We cannot use the canbench-rs suite to test this, so we skip this part in the test
+            // canbench doesn't currently support query calls inside of benchmarks
             if cfg!(not(feature = "canbench-rs")) {
                 // We send a no-op message to self to break up the call context into more messages
                 noop_self_call_if_over_instructions(
@@ -99,7 +96,7 @@ impl Governance {
         });
     }
 
-    /// Process a single voting state machine until it is over the soft limit, then return
+    /// Process a single voting state machine until it is over the soft limit or finished, then return
     fn process_machine_until_soft_limit(
         &mut self,
         machine: &mut ProposalVotingStateMachine,
@@ -125,7 +122,7 @@ impl Governance {
     }
 
     /// Process all voting state machines.  This function is called in the timer job.
-    /// It processes voting state machines until the soft limit is reached.
+    /// It processes voting state machines until the soft limit is reached or there is no work to do.
     pub fn process_voting_state_machines(&mut self) {
         let mut proposals_processed = btreeset! {};
         with_voting_state_machines_mut(|voting_state_machines| loop {
@@ -365,8 +362,9 @@ impl ProposalVotingStateMachine {
         if !voting_finished {
             while let Some(neuron_id) = self.neurons_to_check_followers.pop_first() {
                 self.add_followers_to_check(neuron_store, neuron_id, self.topic);
-                actions_performed += 1;
+
                 // Before we check the next one, see if we're over the limit.
+                actions_performed += 1;
                 if actions_performed % check_after_number_actions == 0
                     && is_over_instructions_limit()
                 {
@@ -395,6 +393,8 @@ impl ProposalVotingStateMachine {
                 // Vote::Unspecified is ignored by cast_vote.
                 self.cast_vote(ballots, follower, vote);
 
+                // Before we record the next one, see if we're over the limit.
+                actions_performed += 1;
                 if actions_performed % check_after_number_actions == 0
                     && is_over_instructions_limit()
                 {
@@ -403,7 +403,6 @@ impl ProposalVotingStateMachine {
             }
         } else {
             while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
-                actions_performed += 1;
                 match neuron_store.register_recent_neuron_ballot(
                     neuron_id,
                     self.topic,
@@ -420,6 +419,7 @@ impl ProposalVotingStateMachine {
                 };
 
                 // Before we record the next one, see if we're over the limit.
+                actions_performed += 1;
                 if actions_performed % check_after_number_actions == 0
                     && is_over_instructions_limit()
                 {
@@ -931,8 +931,10 @@ mod test {
             Box::new(StubCMC {}),
         );
 
-        // The current bheavior of long_message library is to breakup messages every other message
-        // in non-wasm compilation, so we know that the logic here is already accounting for that.
+        // In our test configuration, we always return "true" for is_over_instructions_limit()
+        // So our logic is at least resilient to not having enough instructions, and is able
+        // to continue working.  Without this, it could be possible to choose wrong settings
+        // that make it impossible to advance.
         governance
             .cast_vote_and_cascade_follow(
                 ProposalId { id: 1 },
@@ -1004,8 +1006,6 @@ mod test {
             Box::new(StubCMC {}),
         );
 
-        // The current bheavior of long_message library is to breakup messages every other message
-        // in non-wasm compilation, so we know that the logic here is already accounting for that.
         let _f = in_test_temporarily_set_call_context_over_threshold();
         governance
             .cast_vote_and_cascade_follow(
@@ -1020,11 +1020,6 @@ mod test {
 
     #[test]
     fn test_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit() {
-        // TODO - is there a cleaner way to write this test that makes the behavior of
-        // the message breaking a bit more clear and part of the scope of the test?
-        // This currenly relies on the the every-other-call true/false return of is_message_over_threshold
-        // in non-wasm contexts.
-
         let topic = Topic::NetworkEconomics;
         let mut neurons = BTreeMap::new();
         let mut ballots = HashMap::new();
@@ -1061,8 +1056,8 @@ mod test {
             Box::new(StubCMC {}),
         );
 
-        // The current bheavior of long_message library is to breakup messages every other message
-        // in non-wasm compilation, so we know that the logic here is already accounting for that.
+        // In test mode, we are always saying we're over the soft-message limit, so we know that
+        // this will hit that limit and not record any recent ballots.
         governance
             .cast_vote_and_cascade_follow(
                 ProposalId { id: 1 },
