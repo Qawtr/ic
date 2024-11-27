@@ -363,14 +363,18 @@ impl ProposalVotingStateMachine {
         ballots: &mut HashMap<u64, Ballot>,
         is_over_instructions_limit: fn() -> bool,
     ) {
+        let mut actions_performed = 0;
+        let check_after_number_actions = 50;
         let voting_finished = self.is_voting_finished();
 
         if !voting_finished {
             while let Some(neuron_id) = self.neurons_to_check_followers.pop_first() {
                 self.add_followers_to_check(neuron_store, neuron_id, self.topic);
-
+                actions_performed += 1;
                 // Before we check the next one, see if we're over the limit.
-                if is_over_instructions_limit() {
+                if actions_performed % check_after_number_actions == 0
+                    && is_over_instructions_limit()
+                {
                     return;
                 }
             }
@@ -396,13 +400,15 @@ impl ProposalVotingStateMachine {
                 // Vote::Unspecified is ignored by cast_vote.
                 self.cast_vote(ballots, follower, vote);
 
-                // Before we check the next one, see if we're over the limit.
-                if is_over_instructions_limit() {
+                if actions_performed % check_after_number_actions == 0
+                    && is_over_instructions_limit()
+                {
                     return;
                 }
             }
         } else {
             while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
+                actions_performed += 1;
                 match neuron_store.register_recent_neuron_ballot(
                     neuron_id,
                     self.topic,
@@ -419,7 +425,9 @@ impl ProposalVotingStateMachine {
                 };
 
                 // Before we record the next one, see if we're over the limit.
-                if is_over_instructions_limit() {
+                if actions_performed % check_after_number_actions == 0
+                    && is_over_instructions_limit()
+                {
                     return;
                 }
             }
