@@ -134,7 +134,11 @@ impl Governance {
         &self,
         request: GetUpgradeJournalRequest,
     ) -> GetUpgradeJournalResponse {
-        let GetUpgradeJournalRequest {} = request;
+        const DEFAULT_MAX_ENTRIES: u32 = 1000;
+        let max_entries = request
+            .max_entries
+            .map(|n| n.min(DEFAULT_MAX_ENTRIES))
+            .unwrap_or(DEFAULT_MAX_ENTRIES) as usize;
         let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
         match cached_upgrade_steps {
             Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
@@ -143,7 +147,9 @@ impl Governance {
                 target_version: self.proto.target_version.clone(),
                 deployed_version: self.proto.deployed_version.clone(),
                 // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.clone(),
+                upgrade_journal: self.proto.upgrade_journal.as_ref().map(|journal| UpgradeJournal {
+                    entries: journal.entries.iter().rev().take(max_entries).rev().cloned().collect(),
+                }),
             },
             None => GetUpgradeJournalResponse {
                 upgrade_steps: None,
@@ -151,7 +157,9 @@ impl Governance {
                 target_version: None,
                 deployed_version: self.proto.deployed_version.clone(),
                 // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.clone(),
+                upgrade_journal: self.proto.upgrade_journal.as_ref().map(|journal| UpgradeJournal {
+                    entries: journal.entries.iter().rev().take(max_entries).rev().cloned().collect(),
+                }),
             },
         }
     }
