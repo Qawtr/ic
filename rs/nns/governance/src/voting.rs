@@ -6,6 +6,7 @@ use crate::{
 };
 #[cfg(not(test))]
 use ic_nervous_system_long_message::is_message_over_threshold;
+#[cfg(not(feature = "canbench-rs"))]
 use ic_nervous_system_long_message::noop_self_call_if_over_instructions;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
@@ -16,8 +17,13 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
 };
 
-const BILLION: u64 = 1_000_000_000;
+// NOTE: We are using conditional compilation for canbench-rs, because the canbench-rs suite can't
+// currently deal with canister requests. This is a temporary workaround until the canbench-rs suite
+// is updated to support queries during benchmarks.
 
+#[cfg(not(feature = "canbench-rs"))]
+const BILLION: u64 = 1_000_000_000;
+#[cfg(not(feature = "canbench-rs"))]
 const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 
 // For production, we want this higher so that we can process more votes, but without affecting
