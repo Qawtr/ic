@@ -6,7 +6,6 @@ use crate::{
 };
 #[cfg(not(test))]
 use ic_nervous_system_long_message::is_message_over_threshold;
-#[cfg(not(feature = "canbench-rs"))]
 use ic_nervous_system_long_message::noop_self_call_if_over_instructions;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
@@ -17,23 +16,16 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
 };
 
-// NOTE: We are using conditional compilation for canbench-rs, because the canbench-rs suite can't
-// currently deal with canister requests. This is a temporary workaround until the canbench-rs suite
-// is updated to support queries during benchmarks.
-
-#[cfg(not(feature = "canbench-rs"))]
 const BILLION: u64 = 1_000_000_000;
-#[cfg(not(feature = "canbench-rs"))]
-const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 
+const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 // For production, we want this higher so that we can process more votes, but without affecting
 // the overall responsiveness of the canister. 1 Billion seems like a reasonable compromise.
-#[cfg(not(feature = "test"))]
-const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 1 * BILLION;
-// For tests, we want this low so that we can observe the edge behaviors of cast_vote_and_cascade_follow
-// in integration tests, namely only recording votes, and not recent ballots when limits are hit.
-#[cfg(feature = "test")]
-const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = 1_000_000;
+const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = if cfg!(feature = "test") {
+    1_000_000
+} else {
+    BILLION
+};
 
 #[cfg(not(test))]
 fn over_soft_message_limit() -> bool {
@@ -74,13 +66,15 @@ impl Governance {
                     is_voting_finished = machine.is_voting_finished();
                 });
             });
-            // We send a no-op message to self to break up the call context into more messages
-            #[cfg(not(feature = "canbench-rs"))]
-            noop_self_call_if_over_instructions(
-                SOFT_VOTING_INSTRUCTIONS_LIMIT,
-                Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
-            )
-            .await;
+            // We cannot use the canbench-rs suite to test this, so we skip this part in the test
+            if cfg!(not(feature = "canbench-rs")) {
+                // We send a no-op message to self to break up the call context into more messages
+                noop_self_call_if_over_instructions(
+                    SOFT_VOTING_INSTRUCTIONS_LIMIT,
+                    Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
+                )
+                .await;
+            }
         }
     }
 
