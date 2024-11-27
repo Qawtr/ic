@@ -150,11 +150,6 @@ impl Governance {
                 break;
             }
         });
-        // TODO DO NOT MERGE Is this needed here?  It's also processed
-        // in the heartbeats.
-        for proposal_id in proposals_processed {
-            self.process_proposal(proposal_id);
-        }
     }
 }
 
