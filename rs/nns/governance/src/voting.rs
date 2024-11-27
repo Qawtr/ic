@@ -22,9 +22,9 @@ const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 // For production, we want this higher so that we can process more votes, but without affecting
 // the overall responsiveness of the canister. 1 Billion seems like a reasonable compromise.
 const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = if cfg!(feature = "test") {
-    1_000_000
+    1_000_000_000_000_000
 } else {
-    BILLION
+    20 * BILLION
 };
 
 #[cfg(not(test))]
@@ -894,15 +894,6 @@ mod test {
         assert!(state_machine.is_completely_finished());
     }
 
-    // TODO DO NOT MERGE How to test this?
-    // What do I want to test?
-    // 1. That the loop continues until done
-    // 2. That the loop breaks if over the soft limit
-    // 3. That it panics if over the hard limit
-    // 4. That machine is cleaned up after it is done
-    // 5. That we process votes before recording votes, and allow soft limit to push recording votes into async/timer
-    // 6. That the timer will drain the queue of votes to record...
-    // 7. That we can't lose data if we have to panic (and the votes get recorded in the timer)
     #[test]
     fn test_cast_vote_and_cascade_follow_always_finishes_processing_ballots() {
         let topic = Topic::NetworkEconomics;
