@@ -7,6 +7,8 @@ use crate::{
 #[cfg(not(test))]
 use ic_nervous_system_long_message::is_message_over_threshold;
 use ic_nervous_system_long_message::noop_self_call_if_over_instructions;
+#[cfg(test)]
+use ic_nervous_system_temporary::Temporary;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
 use maplit::btreeset;
@@ -32,9 +34,20 @@ fn over_soft_message_limit() -> bool {
     is_message_over_threshold(SOFT_VOTING_INSTRUCTIONS_LIMIT)
 }
 
+// The following test methods let us test this internally
+#[cfg(test)]
+thread_local! {
+    static OVER_SOFT_MESSAGE_LIMIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }
+}
+
+#[cfg(test)]
+fn temporarily_set_over_soft_message_limit(over: bool) -> Temporary {
+    Temporary::new(&OVER_SOFT_MESSAGE_LIMIT, over)
+}
+
 #[cfg(test)]
 fn over_soft_message_limit() -> bool {
-    true
+    OVER_SOFT_MESSAGE_LIMIT.with(|over| over.get())
 }
 
 impl Governance {
@@ -457,7 +470,7 @@ mod test {
         },
         storage::with_voting_state_machines_mut,
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
-        voting::ProposalVotingStateMachine,
+        voting::{temporarily_set_over_soft_message_limit, ProposalVotingStateMachine},
     };
     use futures::FutureExt;
     use ic_base_types::PrincipalId;
@@ -896,6 +909,7 @@ mod test {
 
     #[test]
     fn test_cast_vote_and_cascade_follow_always_finishes_processing_ballots() {
+        let _a = temporarily_set_over_soft_message_limit(true);
         let topic = Topic::NetworkEconomics;
         let mut neurons = BTreeMap::new();
         let mut ballots = HashMap::new();
@@ -1020,6 +1034,7 @@ mod test {
 
     #[test]
     fn test_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit() {
+        let _a = temporarily_set_over_soft_message_limit(true);
         let topic = Topic::NetworkEconomics;
         let mut neurons = BTreeMap::new();
         let mut ballots = HashMap::new();
