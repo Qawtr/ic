@@ -134,32 +134,42 @@ impl Governance {
         &self,
         request: GetUpgradeJournalRequest,
     ) -> GetUpgradeJournalResponse {
-        const DEFAULT_MAX_ENTRIES: u32 = 100;
-        let max_entries = request
-            .max_entries
-            .map(|n| n.min(DEFAULT_MAX_ENTRIES))
-            .unwrap_or(DEFAULT_MAX_ENTRIES) as usize;
-        let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
-        match cached_upgrade_steps {
+        const MAX_UPGRADE_JOURNAL_ENTRIES: u32 = 100;
+
+        let upgrade_journal = self.proto.upgrade_journal.as_ref().map(|journal| {
+            let max_entries = request
+                .max_entries
+                .map(|n| n.min(MAX_UPGRADE_JOURNAL_ENTRIES))
+                .unwrap_or(MAX_UPGRADE_JOURNAL_ENTRIES) as usize;
+            let start_index = request
+                .start_index
+                .map(|start_index| start_index as usize)
+                .unwrap_or_else(|| journal.entries.len().saturating_sub(max_entries));
+            let entries = journal
+                .entries
+                .iter()
+                .skip(start_index)
+                .take(max_entries)
+                .cloned()
+                .collect();
+            UpgradeJournal { entries }
+        });
+
+        let upgrade_steps = self.proto.cached_upgrade_steps.clone();
+        match upgrade_steps {
             Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
                 upgrade_steps: cached_upgrade_steps.upgrade_steps,
                 response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
                 target_version: self.proto.target_version.clone(),
                 deployed_version: self.proto.deployed_version.clone(),
-                // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.as_ref().map(|journal| UpgradeJournal {
-                    entries: journal.entries.iter().rev().take(max_entries).rev().cloned().collect(),
-                }),
+                upgrade_journal,
             },
             None => GetUpgradeJournalResponse {
                 upgrade_steps: None,
                 response_timestamp_seconds: None,
                 target_version: None,
                 deployed_version: self.proto.deployed_version.clone(),
-                // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.as_ref().map(|journal| UpgradeJournal {
-                    entries: journal.entries.iter().rev().take(max_entries).rev().cloned().collect(),
-                }),
+                upgrade_journal,
             },
         }
     }

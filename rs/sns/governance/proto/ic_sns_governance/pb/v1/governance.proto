@@ -2275,6 +2275,10 @@ message GetUpgradeJournalRequest {
   // Maximum number of journal entries to return, from newest to oldest.
   // If not specified, defaults to 100. Values larger than 100 will be capped at 100.
   optional uint32 max_entries = 1;
+
+  // The starting index from which to return entries, counting from the oldest entry (0).
+  // If not specified, return the most recent entries.
+  optional uint32 start_index = 2;
 }
 
 message GetUpgradeJournalResponse {
